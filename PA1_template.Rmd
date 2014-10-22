@@ -1,25 +1,265 @@
 ---
-title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
-    keep_md: true
+title: "DS5 Peer Assessment 1"
+author: "Tom Geens"
+date: "20 december 2015"
+output: html_document
 ---
 
+#Loading and preprocessing the data
 
-## Loading and preprocessing the data
+##Preparation
+
+First we'll have a look at the software environment in which this exercise will be made and what the current working directory on the local machine is.
+
+```{r, echo=TRUE}
+sessionInfo()
+getwd()
+```
+
+As this is an international course, it is inconvenient to report anything in Dutch, so we'll switch the language to US English so that date, time and other language dependent things can be understood by everybody. We'll also set a separate working directory for this assessment
+
+```{r, echo=TRUE}
+Sys.setlocale("LC_ALL","English")
+setwd("D:/Gegevens/Coursera/DS5")
+```
+
+##Getting and loading the data
+The data are available on the web via a [ZIP-archive](https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip). Let us first download the date, keeping track of the moment on which the download took place.
+
+```{r, echo=TRUE}
+download.file("https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip","act.zip")
+date.downloaded<-Sys.time()
+date.downloaded
+```
+
+As the data are in a ZIP-archive, we'll need to extract the archive in order to access the data. We'll unzip into a temporary directory, list the file(s) in that directory (throw an error if there's more than one), read the first file and store it in R as a data frame.
+
+```{r, echo=TRUE}
+zipdir<-tempfile()
+dir.create(zipdir)
+unzip("act.zip",exdir=zipdir)
+files <- list.files(zipdir)
+if(length(files)>1) stop("More than one data file inside zip")
+file <- paste(zipdir, files[1], sep="/")
+act <- read.csv(file)
+```
+
+##Having a first look at the data
+
+Now we have the data in R, we'll have a first look at it using the head, tail and structure functions. 
+
+```{r, echo=TRUE}
+head(act)
+tail(act)
+str(act)
+```
+
+The structure function learns us that the dataset contains three variables. steps is an integer variable containing a lot of NA's. date is a factor with 61 levels. Knowing that a lot of NA's are present, we'll need to be carefull applying different functions like sums, means and medians. The option na.rm=TRUE or another way to deal with them will be needed.
+
+The table function can be used to examine the frequencies of recordings. 
+
+```{r, echo=TRUE}
+table(act$date)
+table(act$interval)
+```
+
+With the table function (date) we learn that data were collected on 61 subsequent days from the beginning of october till the end of november 2012. With the table function (interval) we learn that, Within each day, the number of steps is recorded each 5 minutes (thus 12 times per hour). Interval is an integer value constructed from a time: the last two digits indicate the minutes within an hour, the first (none, one or two) indicate the hour itself. 
+
+```{r, echo=TRUE}
+recordingsperhour<-12
+recordingsperhour
+recordingsperday<-24*recordingsperhour
+recordingsperday
+recordingsoctober<-31*recordingsperday
+recordingsoctober
+recordingsnovember<-30*recordingsperday
+recordingsnovember
+recordingstotal<-recordingsoctober+recordingsnovember
+recordingstotal
+```
+
+So each day, 12*24=288 measurements are recorded. If we multiply this by 61 days, we get 17568, or the total number of observations within the dataset. 
+
+Off course, it is also usefull to do some exploratory graphs.
+
+```{r, echo=TRUE}
+plot(act$steps~act$date,xlab="Date",ylab="Number of steps")
+boxplot(act$steps,ylab="Number of steps")
+hist(act$steps,xlab="Number of steps")
+```
+
+With the plot function we can see that the steps variable is highly variable and skewed to the left per day. With the boxplot and the histogram function we can get the total picture over 61 days.  
+
+##Total, mean and median number of steps per day
+
+The total number of steps per day can be calculated by applying the sum function over the steps variable using the date as grouping variable. The option na.rm=TRUE has to be used since we learnt that a lot of NA's are present in the dataset. Just for analogy, mean and median number of steps per day are also calculated. We'll do this using the dplyr package (group_by and summarize functions).  
+
+```{r, echo=TRUE}
+library("dplyr")
+byday<-group_by(act,date)
+tidyd<-summarize(byday,StepsSum=sum(steps,na.rm=TRUE),StepsMean=mean(steps,na.rm=TRUE),StepsMedian=median(steps,na.rm=TRUE))
+tidyd
+tidyd$StepsSumNum<-as.numeric(tidyd$StepsSum)
+```
+
+#What is mean total number of steps taken per day?
+
+The three subsections of this question can be adressed using the tidy dataset.
+
+1. Calculate the total number of steps per day
+        
+```{r, echo=TRUE}
+summarize(byday,StepsSum=sum(steps,na.rm=TRUE))
+```
+
+2. If you do not understand the difference between a histogram and a barplot, research the difference between them. Make a histogram of the total number of steps taken each day
+
+```{r, echo=TRUE}
+library("lattice")
+histogram(~steps|as.factor(date),data=act,xlab="Total number of steps each day")
+```
+
+3. Calculate and report the mean and median of the total number of steps taken per day
+
+```{r, echo=TRUE}
+meanstepsperday<-round(mean(tidyd$StepsSumNum))
+meanstepsperday
+medianstepsperday<-round(median(tidyd$StepsSumNum))
+medianstepsperday
+```
+
+The mean number total number of steps taken per day is `r meanstepsperday` and the median total number of steps taken per day is `r medianstepsperday`.
+
+#What is the average daily activity pattern?
+
+To plot the mean daily activity pattern, the average number of steps has to be calculated over all days. We use the same approach as previous (dplyr, summarize by interval).
+
+```{r, echo=TRUE}
+library("dplyr")
+byinterval<-group_by(act,interval)
+tidyi<-summarize(byinterval,StepsSum=sum(steps,na.rm=TRUE),StepsMean=mean(steps,na.rm=TRUE),StepsMedian=median(steps,na.rm=TRUE))
+tidyi
+```
+
+The next step is constructing the plot that is asked:
+
+```{r, echo=TRUE}
+plot.ts(tidyi$interval,tidyi$StepsMean,type="l",xlab="Time interval",ylab="Average number of steps taken")
+```
+
+Finally, we lookup the maximum value of StepsMean within the tidyi tbl_df.
+
+```{r, echo=TRUE}
+tidyi[with(tidyi,which.max(StepsMean)),]
+```
+
+The interval containing the maximum mean number of steps is `r tidyi[with(tidyi,which.max(StepsMean)),]$interval`
+
+#Imputing missing measurements
+
+1. Calculate and report the total number of missing values in the dataset (i.e. the total number of rows with NAs)
+
+Fist of all, we need to calculate the number of missing and non-missing values for the steps variable in the dataset.
+
+```{r, echo=TRUE}
+nmis<-sum(is.na(act$steps))
+nnonmis<-sum(!is.na(act$steps))
+percmis<-round(nmis/(nmis+nnonmis)*100)
+```
+
+In total, `r nmis` intervals have missing values for the steps variable (`r percmis`%).
+
+2. Devise a strategy for filling in all of the missing values in the dataset. 
+
+The number of steps in a 5 minute interval are an example of count data. One of the simplest models for count data is a poisson model. A poisson distribution only has one parameter: it's mean (lambda). A strategy to fill up NA's might be using random numbers from a poisson model and setting the lambda parameter equal to the mean number of steps (over all 61 days for that interval).
+
+3. Create a new dataset that is equal to the original dataset but with the missing data filled in.
+
+In the following chunk, we calculate an imputed dataset actimp in which the NA's of the original act dataset are filled with random numbers from Poisson models.
+
+```{r, echo=TRUE}
+set.seed(12345)
+actimp<-act
+for(i in 1:length(actimp$steps)) {
+        if(is.na(actimp$steps[i])) {
+                int<-actimp$interval[i]
+                actimp$steps[i]<-rpois(1,tidyi[which(tidyi$interval==int),]$StepsMean)
+        } else {
+                actimp$steps[i]<-actimp$steps[i]
+        }
+}
+```
+
+4. Make a histogram of the total number of steps taken each day and Calculate and report the mean and median total number of steps taken per day. Do these values differ from the estimates from the first part of the assignment? What is the impact of imputing missing data on the estimates of the total daily number of steps?
 
 
+```{r, echo=TRUE}
+library("lattice")
+histogram(~steps|as.factor(date),data=actimp,xlab="Total number of steps each day")
+```
 
-## What is mean total number of steps taken per day?
+```{r, echo=TRUE}
+library("dplyr")
+bydayimp<-group_by(actimp,date)
+tidydimp<-summarize(bydayimp,StepsSum=sum(steps,na.rm=TRUE),StepsMean=mean(steps,na.rm=TRUE),StepsMedian=median(steps,na.rm=TRUE))
+tidydimp
+tidydimp$StepsSumNum<-as.numeric(tidydimp$StepsSum)
+```
+
+```{r, echo=TRUE}
+meanstepsperdayimp<-round(mean(tidydimp$StepsSumNum))
+meanstepsperdayimp
+medianstepsperdayimp<-round(median(tidydimp$StepsSumNum))
+medianstepsperdayimp
+```
+
+The original mean number of steps per day was `r meanstepsperday`, the imputed number `r meanstepsperdayimp`.
+The original median number of steps per day was `r medianstepsperday`, the imputed number `r medianstepsperdayimp`.
+
+The imputed values are higher. This is quite logical. When there are missing values for a given interval, that interval does not add something to the total number of steps per day. There are even days where none of the intervals contains a valid number of steps. Those days are lowering the overall mean over 61 days. When the NA values are imputed, this problem is solved.
 
 
+```{r, echo=TRUE}
+with(tidyd,plot(as.numeric(date),StepsMean,xlab="Day",ylab="Average number of steps taken",type="n"))
+points(tidydimp$date,tidydimp$StepsMean,pch=1,col="blue")
+points(tidyd$date,tidyd$StepsMean,pch=1,col="red")
+```
 
-## What is the average daily activity pattern?
+#Are there differences in activity patterns between weekdays and weekends?
+
+1. Create a new factor variable in the dataset with two levels - "weekday" and "weekend" indicating whether a given date is a weekday or weekend day.
+
+First, we create the weekend variable as a vector having the same length as the other variables in the dataset actimp. Saturdays and Sundays get an assigned value of 2, weekdays get a 1. Subsequently, we convert the variable to a factor and look at its properties
+
+```{r, echo=TRUE}
+actimp$weekday<-weekdays(as.POSIXlt(actimp$date))
+actimp$weekend<-vector(length=length(actimp$steps))
+actimp$weekend[which(actimp$weekday=="Saturday")]<-2
+actimp$weekend[which(actimp$weekday!="Saturday")]<-1
+actimp$weekend[which(actimp$weekday=="Sunday")]<-2
+mean(actimp$weekend)
+actimp$weekend<-as.factor(actimp$weekend)
+levels(actimp$weekend)<-c("weekday","weekend")
+str(actimp$weekend)
+table(actimp$weekend)
+```
+
+2. Make a panel plot containing a time series plot (i.e. type = "l") of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all weekday days or weekend days (y-axis). 
+
+First, we summarize the number of steps (dataset with imputed values) using the dplyr package by interval and weekend.
+
+```{r, echo=TRUE}
+library("dplyr")
+byintervalw<-group_by(actimp,interval,weekend)
+tidyiw<-summarize(byintervalw,StepsSum=sum(steps,na.rm=TRUE),StepsMean=mean(steps,na.rm=TRUE),StepsMedian=median(steps,na.rm=TRUE))
+tidyiw
+```
+
+Second, we produce the panel plot that was asked using the lattice system.
+
+```{r, echo=TRUE}
+library("lattice")
+xyplot(StepsMean~interval|weekend,data=tidyiw,xlab="Mean number of steps each interval",type="l")
+```
 
 
-
-## Imputing missing values
-
-
-
-## Are there differences in activity patterns between weekdays and weekends?
